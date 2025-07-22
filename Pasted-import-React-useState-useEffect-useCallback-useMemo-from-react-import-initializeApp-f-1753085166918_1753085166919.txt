@@ -1,0 +1,1283 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+    getAuth, 
+    onAuthStateChanged, 
+    createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword, 
+    signOut,
+    signInWithCustomToken,
+    GoogleAuthProvider,
+    FacebookAuthProvider,
+    OAuthProvider,
+    signInWithPopup,
+    RecaptchaVerifier,
+    signInWithPhoneNumber,
+    signInAnonymously
+} from 'firebase/auth';
+import { 
+    getFirestore, 
+    doc, 
+    setDoc, 
+    getDoc, 
+    addDoc, 
+    collection, 
+    query, 
+    onSnapshot,
+    updateDoc,
+    arrayUnion,
+    arrayRemove,
+    getDocs,
+    limit,
+    orderBy as firestoreOrderBy
+} from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { setLogLevel } from 'firebase/firestore';
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Trophy, Users, TrendingUp, Search, Star, MapPin, Calendar,
+  DollarSign, Award, Target, CheckCircle, ArrowRight, Play, Shield,
+  BarChart3, Briefcase, GraduationCap, Heart, LogIn, UserPlus, Sun, Moon, Sparkles, PlusCircle, Edit, Eye, Building, User as UserIcon, BookOpen as BookOpenIcon, X, Phone, Upload
+} from 'lucide-react';
+
+// --- Helper Functions & Configuration ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDAII7wMtdl6zqB2BAJG_jm6-Uw_J5I_KA",
+  authDomain: "sportsin-90f04.firebaseapp.com",
+  projectId: "sportsin-90f04",
+  storageBucket: "sportsin-90f04.appspot.com",
+  messagingSenderId: "544875321849",
+  appId: "1:544875321849:web:07bce1f7b07130ec440528",
+  measurementId: "G-WLZE2QBV1C"
+};
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-sports-in-app';
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+const appCheck = initializeAppCheck(app, {
+  provider: new ReCaptchaV3Provider('6LfSSoMrAAAAAMp0apqpwWZDlsn-JRkFZ86BjiiA'),
+  isTokenAutoRefreshEnabled: true
+});
+
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+setLogLevel('debug');
+
+// --- ERROR BOUNDARY COMPONENT ---
+class ErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error, errorInfo) {
+        console.error('Error caught by boundary:', error, errorInfo);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                    <div className="max-w-md w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg p-6">
+                        <h2 className="text-xl font-bold text-red-600 mb-4">Something went wrong</h2>
+                        <p className="text-gray-600 dark:text-gray-400 mb-4">
+                            We're sorry, but something unexpected happened. Please try refreshing the page.
+                        </p>
+                        <button 
+                            onClick={() => window.location.reload()}
+                            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                            Refresh Page
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
+// --- Main Application Component ---
+function App() {
+    return (
+        <ErrorBoundary>
+            <SportsINApp />
+        </ErrorBoundary>
+    )
+}
+
+function SportsINApp() {
+    const [user, setUser] = useState(null);
+    const [userData, setUserData] = useState(null);
+    const [authStatus, setAuthStatus] = useState('loading');
+    const [page, setPage] = useState('home');
+    const [viewingProfileId, setViewingProfileId] = useState(null);
+    const [applyingToJob, setApplyingToJob] = useState(null);
+    const [error, setError] = useState('');
+    const [theme, setTheme] = useState('light');
+    const [isOnboarding, setIsOnboarding] = useState(false);
+
+    useEffect(() => {
+        if (theme === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+    }, [theme]);
+
+    const toggleTheme = () => setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+
+    useEffect(() => {
+        let userDocUnsubscribe = null;
+        const authUnsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            if (userDocUnsubscribe) {
+                userDocUnsubscribe();
+            }
+            if (currentUser) {
+                if (currentUser.isAnonymous) {
+                    setUser(null);
+                    setUserData(null);
+                    setAuthStatus('unauthenticated');
+                    if (page !== 'auth') setPage('home');
+                } else {
+                    const userDocRef = doc(db, `/artifacts/${appId}/users`, currentUser.uid);
+                    userDocUnsubscribe = onSnapshot(userDocRef, (userDoc) => {
+                        if (userDoc.exists()) {
+                            const data = userDoc.data();
+                            setUserData(data);
+                            if (data?.onboardingComplete) {
+                                setUser(currentUser);
+                                setIsOnboarding(false);
+                                setAuthStatus('authenticated');
+                                if (page === 'home' || page === 'auth') {
+                                    setPage('dashboard');
+                                }
+                            } else {
+                                setUser(currentUser);
+                                setIsOnboarding(true);
+                                setAuthStatus('authenticated'); 
+                            }
+                        } else {
+                            console.warn("Authenticated user has no Firestore document yet. Waiting for creation.");
+                            setAuthStatus('unauthenticated');
+                        }
+                    }, (err) => {
+                        console.error("Error listening to user document:", err);
+                        setAuthStatus('unauthenticated');
+                    });
+                }
+            } else {
+                setUser(null);
+                setUserData(null);
+                setIsOnboarding(false);
+                setAuthStatus('unauthenticated');
+                if (page !== 'auth') setPage('home');
+                if (!auth.currentUser) {
+                    try {
+                        await signInAnonymously(auth);
+                    } catch (e) {
+                        console.error("Anonymous sign-in failed:", e);
+                    }
+                }
+            }
+        });
+        return () => {
+            authUnsubscribe();
+            if (userDocUnsubscribe) {
+                userDocUnsubscribe();
+            }
+        };
+    }, []);
+
+    const handleSignOut = async () => {
+        await signOut(auth);
+    };
+    
+    const handleOnboardingComplete = useCallback(async () => {
+        if (!user) return;
+        const userDocRef = doc(db, `/artifacts/${appId}/users`, user.uid);
+        await updateDoc(userDocRef, { onboardingComplete: true });
+    }, [user]);
+
+    if (authStatus === 'loading') {
+        return <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white"><Trophy className="h-16 w-16 text-blue-500 animate-pulse" /><h1 className="text-4xl font-bold mt-4">SportsIN</h1><p className="text-lg mt-2">Connecting Legends.</p></div>;
+    }
+
+    const pageVariants = { initial: { opacity: 0, y: 20 }, in: { opacity: 1, y: 0 }, out: { opacity: 0, y: -20 } };
+    const pageTransition = { type: "tween", ease: "anticipate", duration: 0.5 };
+    
+    const renderPage = () => {
+        let currentPageComponent;
+        if (applyingToJob) {
+            currentPageComponent = <JobApplicationPage job={applyingToJob} user={user} onBack={() => setApplyingToJob(null)} />;
+        } else if (isOnboarding) {
+            currentPageComponent = <OnboardingFlow user={user} userData={userData} onOnboardingComplete={handleOnboardingComplete} />;
+        } else if (authStatus === 'authenticated') {
+             switch (page) {
+                case 'dashboard': currentPageComponent = <DashboardPage userData={userData} setPage={setPage} />; break;
+                case 'profile': currentPageComponent = <ProfilePage viewingUserId={viewingProfileId || user.uid} currentUser={user} currentUserData={userData} setPage={setPage} setViewingProfileId={setViewingProfileId}/>; break;
+                case 'nil-marketplace': currentPageComponent = <NILMarketplace user={user} userData={userData} />; break;
+                case 'nil-tracker': currentPageComponent = <NILTracker user={user} />; break;
+                case 'job-board': currentPageComponent = <JobBoard user={user} userData={userData} setApplyingToJob={setApplyingToJob} />; break;
+                case 'education-hub': currentPageComponent = <EducationHub />; break;
+                case 'athlete-browser': currentPageComponent = <AthleteBrowserPage setPage={setPage} setViewingProfileId={setViewingProfileId} />; break;
+                default: currentPageComponent = <DashboardPage userData={userData} setPage={setPage} />;
+            }
+        } else {
+            switch (page) {
+                case 'auth': currentPageComponent = <AuthPage setPage={setPage} setError={setError} />; break;
+                default: currentPageComponent = <HomePage setPage={setPage} authStatus={authStatus} />;
+            }
+        }
+        return (
+            <AnimatePresence mode="wait">
+                <motion.div key={page + isOnboarding + viewingProfileId + (applyingToJob?.id || '')} initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
+                    {currentPageComponent}
+                </motion.div>
+            </AnimatePresence>
+        );
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
+            <Navbar user={user} setPage={setPage} setViewingProfileId={setViewingProfileId} handleSignOut={handleSignOut} theme={theme} toggleTheme={toggleTheme} />
+            <main className="p-4 md:p-8">
+                {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4 max-w-4xl mx-auto" role="alert">{error}</div>}
+                {renderPage()}
+            </main>
+            <Footer />
+        </div>
+    );
+}
+
+// --- UI Components ---
+const Button = ({ children, variant = 'primary', size = 'md', className = '', ...props }) => {
+    const baseStyle = "font-bold py-2 px-4 rounded-lg transition-all duration-300 flex items-center justify-center shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800";
+    const variants = {
+        primary: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
+        outline: "bg-transparent border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 focus:ring-blue-500",
+        secondary: "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 focus:ring-gray-500",
+        ghost: "bg-transparent text-blue-600 hover:bg-blue-50 dark:hover:bg-gray-800 focus:ring-blue-500",
+    };
+    const sizes = { sm: "text-sm px-3 py-1", md: "text-base px-4 py-2", lg: "text-lg px-8 h-12" };
+    return <button className={`${baseStyle} ${variants[variant]} ${sizes[size]} ${className}`} {...props}>{children}</button>;
+};
+const Card = ({ children, className = '', ...props }) => <div className={`bg-white dark:bg-gray-800 shadow-lg rounded-xl overflow-hidden ${className}`} {...props}>{children}</div>;
+const CardHeader = ({ children, className = '' }) => <div className={`p-6 ${className}`}>{children}</div>;
+const CardTitle = ({ children, className = '' }) => <h3 className={`text-xl font-bold text-gray-900 dark:text-white ${className}`}>{children}</h3>;
+const CardDescription = ({ children, className = '' }) => <p className={`text-gray-500 dark:text-gray-400 ${className}`}>{children}</p>;
+const CardContent = ({ children, className = '' }) => <div className={`p-6 pt-0 ${className}`}>{children}</div>;
+const Badge = ({ children, variant = 'primary', className = '' }) => {
+    const variants = {
+        primary: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+        secondary: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+        outline: "border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300"
+    };
+    return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${variants[variant]} ${className}`}>{children}</span>;
+};
+const Input = ({ className = '', ...props }) => <input className={`w-full p-3 pl-4 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 ${className}`} {...props} />;
+const Avatar = ({ src, fallback, className = '' }) => <div className={`relative inline-flex items-center justify-center w-16 h-16 overflow-hidden bg-gray-100 dark:bg-gray-600 rounded-full ${className}`}><img src={src} alt="avatar" className="w-full h-full object-cover" onError={(e) => e.target.style.display='none'} /><span className="font-medium text-gray-600 dark:text-gray-300">{fallback}</span></div>;
+
+// --- Page Components ---
+function Navbar({ user, setPage, setViewingProfileId, handleSignOut, theme, toggleTheme }) {
+    const handleMyProfileClick = () => {
+        setViewingProfileId(null); // Clear viewing ID to show own profile
+        setPage('profile');
+    }
+    return (
+        <header className="bg-white/80 dark:bg-gray-800/80 shadow-sm border-b border-gray-200 dark:border-gray-700 backdrop-blur-lg sticky top-0 z-50">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex justify-between items-center h-16">
+                    <div onClick={() => setPage(user ? 'dashboard' : 'home')} className="flex items-center space-x-3 cursor-pointer">
+                        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center"><Trophy className="h-6 w-6 text-white" /></div>
+                        <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400">SportsIN</h1>
+                    </div>
+                    <nav className="hidden md:flex items-center space-x-4">
+                        <button onClick={() => setPage('job-board')} className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">Jobs</button>
+                        <button onClick={() => setPage('nil-marketplace')} className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">NIL</button>
+                        <button onClick={() => setPage('athlete-browser')} className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors">Athletes</button>
+                    </nav>
+                    <div className="flex items-center space-x-2">
+                        <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">{theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}</button>
+                        {user ? (
+                            <>
+                                <Button variant="ghost" onClick={handleMyProfileClick}>My Profile</Button>
+                                <Button variant="primary" onClick={handleSignOut}>Sign Out</Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button variant="outline" onClick={() => setPage('auth')}>Sign In</Button>
+                                <Button variant="primary" onClick={() => setPage('auth')}>Get Started</Button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </header>
+    );
+}
+
+function HomePage({ setPage, authStatus }) {
+    const [jobs, setJobs] = useState([]);
+    const [nils, setNils] = useState([]);
+    const [athletes, setAthletes] = useState([]);
+
+    useEffect(() => {
+        if (authStatus === 'loading') return;
+        const jobsQuery = query(collection(db, `/artifacts/${appId}/public/data/jobs`), firestoreOrderBy('createdAt', 'desc'), limit(2));
+        const nilsQuery = query(collection(db, `/artifacts/${appId}/public/data/nil_opportunities`), firestoreOrderBy('createdAt', 'desc'), limit(3));
+        const athletesQuery = query(collection(db, `/artifacts/${appId}/public/data/profiles`), limit(3));
+        const unsubJobs = onSnapshot(jobsQuery, (snapshot) => setJobs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))), (error) => console.error("Error fetching jobs:", error));
+        const unsubNils = onSnapshot(nilsQuery, (snapshot) => setNils(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))), (error) => console.error("Error fetching NILs:", error));
+        const unsubAthletes = onSnapshot(athletesQuery, (snapshot) => setAthletes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))), (error) => console.error("Error fetching athletes:", error));
+        return () => { unsubJobs(); unsubNils(); unsubAthletes(); };
+    }, [authStatus]);
+
+    return (
+        <div className="bg-slate-50 dark:bg-gray-900">
+            <section className="py-20 px-4 sm:px-6 lg:px-8">
+                <div className="max-w-7xl mx-auto text-center">
+                    <h2 className="text-5xl md:text-6xl font-extrabold text-gray-900 dark:text-white mb-6">Connect with Legends</h2>
+                    <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl mx-auto">The premier network for athletes, coaches, and teams to build legacies and find their next opportunity.</p>
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+                        <Button size="lg" variant="primary" onClick={() => setPage('auth')}><UserPlus className="mr-2 h-5 w-5" />Create Your Profile</Button>
+                        <Button size="lg" variant="outline" onClick={() => setPage('job-board')}><Search className="mr-2 h-5 w-5"/>Explore Opportunities</Button>
+                    </div>
+                </div>
+            </section>
+            <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-gray-800">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-12"><h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Featured Opportunities & Talent</h3></div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="space-y-6">
+                             <h4 className="text-2xl font-semibold flex items-center gap-2"><Users className="text-blue-500"/> Top Athletes</h4>
+                            {athletes.map(athlete => (
+                                <Card key={athlete.id} className="hover:shadow-xl transition-shadow cursor-pointer hover:-translate-y-1">
+                                    <CardHeader className="pb-4 flex flex-row items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                            <Avatar src={athlete.profilePicUrl} fallback={athlete.name.split(' ').map(n => n[0]).join('')} />
+                                            <div><CardTitle className="text-lg">{athlete.name}</CardTitle><CardDescription>{athlete.sport} • {athlete.position}</CardDescription></div>
+                                        </div>
+                                        <Badge variant="secondary"><CheckCircle className="h-3 w-3 mr-1" />Verified</Badge>
+                                    </CardHeader>
+                                </Card>
+                            ))}
+                        </div>
+                        <div className="space-y-6">
+                            <h4 className="text-2xl font-semibold flex items-center gap-2"><Briefcase className="text-blue-500"/> Hot Jobs</h4>
+                            {jobs.map(job => (
+                                <Card key={job.id} className="hover:shadow-xl transition-shadow cursor-pointer hover:-translate-y-1">
+                                    <CardHeader><CardTitle>{job.title}</CardTitle><CardDescription>{job.company}</CardDescription></CardHeader>
+                                    <CardContent><div className="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-2"><MapPin className="h-4 w-4 mr-2" />{job.location}</div><div className="flex items-center text-sm text-green-600 dark:text-green-400"><DollarSign className="h-4 w-4 mr-2" />{job.salary}</div></CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                        <div className="space-y-6">
+                             <h4 className="text-2xl font-semibold flex items-center gap-2"><Star className="text-blue-500"/> NIL Deals</h4>
+                            {nils.map(nil => (
+                                <Card key={nil.id} className="hover:shadow-xl transition-shadow cursor-pointer hover:-translate-y-1">
+                                    <CardHeader><CardTitle>{nil.title}</CardTitle><CardDescription>{nil.brandName}</CardDescription></CardHeader>
+                                    <CardContent><div className="flex items-center justify-between"><span className="text-lg font-bold text-green-600 dark:text-green-400">{nil.compensation}</span><Badge>{nil.sport || 'Any Sport'}</Badge></div></CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    );
+}
+
+function Footer() {
+    return (
+        <footer className="bg-gray-900 text-white py-12 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                    <div>
+                        <div className="flex items-center space-x-3 mb-4"><div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><Trophy className="h-5 w-5 text-white" /></div><span className="text-xl font-bold">SportsIN</span></div>
+                        <p className="text-gray-400">The premier sports career platform.</p>
+                    </div>
+                </div>
+                <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400"><p>&copy; {new Date().getFullYear()} SportsIN. All rights reserved.</p></div>
+            </div>
+        </footer>
+    );
+}
+
+function AuthPage({ setPage, setError }) {
+    const [isLogin, setIsLogin] = useState(true);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+    const [showPhoneModal, setShowPhoneModal] = useState(false);
+    
+    const createUserDocuments = async (user, name, userType) => {
+        const userDocRef = doc(db, `/artifacts/${appId}/users`, user.uid);
+        await setDoc(userDocRef, { uid: user.uid, email: user.email, name: name, userType: userType, createdAt: new Date(), onboardingComplete: false, followers: [], following: [] });
+        if (userType === 'athlete') {
+            const profileDocRef = doc(db, `/artifacts/${appId}/public/data/profiles`, user.uid);
+            await setDoc(profileDocRef, {
+                name: name, bio: 'A passionate athlete ready for the next challenge.', sport: 'Not Set', position: 'Not Set',
+                profilePicUrl: user.photoURL || `https://placehold.co/400x400/EBF4FF/76A9FA?text=${name.charAt(0)}`,
+                stats: [], academics: [], videoHighlights: [],
+            });
+        }
+    };
+
+    const handleEmailAuth = async (e) => {
+        e.preventDefault();
+        setError('');
+        try {
+            if (isLogin) {
+                await signInWithEmailAndPassword(auth, email, password);
+            } else {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                await createUserDocuments(userCredential.user, name, 'athlete');
+            }
+        } catch (error) { setError(error.message); }
+    };
+
+    const handleSocialSignIn = async (provider) => {
+        setError('');
+        try {
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+            const userDocRef = doc(db, `/artifacts/${appId}/users`, user.uid);
+            const userDoc = await getDoc(userDocRef);
+            if (!userDoc.exists()) {
+                await createUserDocuments(user, user.displayName, null);
+            }
+        } catch (error) { setError(`Social sign-in failed: ${error.message}`); }
+    };
+    
+    const handleGoogleSignIn = () => handleSocialSignIn(new GoogleAuthProvider());
+    const handleAppleSignIn = () => handleSocialSignIn(new OAuthProvider('apple.com'));
+    const handleFacebookSignIn = () => handleSocialSignIn(new FacebookAuthProvider());
+    const handlePhoneSignInClick = () => setShowPhoneModal(true);
+    
+    const handleDemoLogin = async () => {
+        setError('');
+        try {
+            await signInWithEmailAndPassword(auth, 'demo@sportsin.io', 'demopassword');
+        } catch (error) {
+            if (error.code === 'auth/user-not-found') {
+                try {
+                    const userCredential = await createUserWithEmailAndPassword(auth, 'demo@sportsin.io', 'demopassword');
+                    const user = userCredential.user;
+                    const userDocRef = doc(db, `/artifacts/${appId}/users`, user.uid);
+                    await setDoc(userDocRef, { uid: user.uid, email: user.email, name: "Demo Athlete", userType: "athlete", createdAt: new Date(), onboardingComplete: true, followers: [], following: [] });
+                    const profileDocRef = doc(db, `/artifacts/${appId}/public/data/profiles`, user.uid);
+                    await setDoc(profileDocRef, {
+                        name: "Demo Athlete", bio: 'A passionate athlete ready for the next challenge.', sport: 'Football', position: 'Quarterback',
+                        profilePicUrl: `https://placehold.co/400x400/EBF4FF/76A9FA?text=D`,
+                        stats: [{ name: 'Passing YDS', value: '3,500' }, { name: 'TDs', value: '32' }],
+                        academics: [{ name: 'GPA', value: '3.8' }, { name: 'Major', value: 'Kinesiology' }],
+                        videoHighlights: [{ url: 'https://www.youtube.com/watch?v=ScMzIvxBSi4' }],
+                    });
+                } catch (creationError) { setError(`Failed to create demo user: ${creationError.message}`); }
+            } else { setError(error.message); }
+        }
+    };
+
+    const GoogleIcon = (props) => (<svg viewBox="0 0 48 48" {...props}><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C43.021,36.251,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>);
+    const AppleIcon = (props) => (<svg viewBox="0 0 24 24" {...props}><path fill="currentColor" d="M17.02.6C15.54.55 14.16.6 12.86 1.62c-1.31 1.03-2.2 2.6-2.2 4.23v.14c.9-.6 1.95-.87 3.03-.87 1.48 0 2.9.83 3.6 2.03.78 1.2.68 2.8-.23 3.85-.9 1.05-2.32 1.65-3.63 1.65-1.1 0-2.1-.4-3.02-1.05v.1c0 2.8-1.93 4.3-4.32 4.3-1.18 0-2.25-.5-3.02-.5-.8 0-1.6.5-2.4.5-1.78 0-3.3-1.1-4.2-2.7C-.05 14.1.04 12.3 1.12 11c1.1-1.3 2.7-2.08 4.3-2.08 1.18 0 2.2.5 2.9.5.82 0 1.6-.5 2.4-.5 1.9 0 3.4 1.2 4.1 2.6.1.2.2.4.3.6.4-.1.8-.2 1.2-.2 1.2 0 2.3.5 3.1 1.4.02-1.8 1.2-3.1 2.8-3.6-.1-.3-.2-.6-.3-.9-.6-1.6-1.9-2.8-3.5-3.3C18.1 3.2 18.12 1.8 17.02.6Z"/></svg>);
+    const FacebookIcon = (props) => (<svg viewBox="0 0 24 24" {...props}><path fill="#1877F2" d="M22.675 0H1.325C.593 0 0 .593 0 1.325v21.35C0 23.407.593 24 1.325 24H12.82v-9.29h-3.128v-3.622h3.128V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116c.732 0 1.325-.593 1.325-1.325V1.325C24 .593 23.407 0 22.675 0z"/></svg>);
+
+    return (
+        <>
+            <AnimatePresence>
+                {showPhoneModal && <PhoneAuthModal onClose={() => setShowPhoneModal(false)} setError={setError} />}
+            </AnimatePresence>
+            <div className="max-w-md mx-auto mt-10">
+                <Card>
+                    <CardHeader><CardTitle className="text-2xl text-center">{isLogin ? 'Sign In' : 'Create Account'}</CardTitle><CardDescription className="text-center">to continue to SportsIN</CardDescription></CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                            <Button variant="outline" onClick={handleGoogleSignIn}><GoogleIcon className="h-5 w-5 mr-2" /> Google</Button>
+                            <Button variant="outline" onClick={handleAppleSignIn}><AppleIcon className="h-5 w-5 mr-2" /> Apple</Button>
+                            <Button variant="outline" onClick={handleFacebookSignIn}><FacebookIcon className="h-5 w-5 mr-2" /> Facebook</Button>
+                            <Button variant="outline" onClick={handlePhoneSignInClick}><Phone className="mr-2 h-5 w-5" /> Phone</Button>
+                        </div>
+                        <div className="flex items-center my-4"><div className="flex-grow border-t border-gray-300 dark:border-gray-600"></div><span className="flex-shrink mx-4 text-gray-500 dark:text-gray-400 text-sm">OR</span><div className="flex-grow border-t border-gray-300 dark:border-gray-600"></div></div>
+                        <form onSubmit={handleEmailAuth}>
+                            {!isLogin && (<div className="mb-4"><label className="block text-gray-700 dark:text-gray-300 font-bold mb-2" htmlFor="name">Full Name</label><Input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} required /></div>)}
+                            <div className="mb-4"><label className="block text-gray-700 dark:text-gray-300 font-bold mb-2" htmlFor="email">Email</label><Input type="email" id="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
+                            <div className="mb-6"><label className="block text-gray-700 dark:text-gray-300 font-bold mb-2" htmlFor="password">Password</label><Input type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
+                            <div className="flex flex-col gap-4">
+                                <Button type="submit" variant="primary" size="lg" className="w-full">{isLogin ? 'Sign In' : 'Sign Up'}</Button>
+                                <Button type="button" onClick={handleDemoLogin} variant="secondary" size="lg" className="w-full">Login as Demo Athlete</Button>
+                            </div>
+                             <p className="text-center mt-4"><a href="#" onClick={(e) => { e.preventDefault(); setIsLogin(!isLogin); setError(''); }} className="font-bold text-sm text-blue-500 hover:text-blue-600">{isLogin ? 'Need an account? Sign Up' : 'Already have an account? Sign In'}</a></p>
+                        </form>
+                    </CardContent>
+                </Card>
+            </div>
+        </>
+    );
+}
+
+// --- ONBOARDING COMPONENTS ---
+function OnboardingFlow({ user, userData, onOnboardingComplete }) {
+    const [step, setStep] = useState(userData?.userType ? 2 : 1);
+
+    const handleRoleSelect = async (role) => {
+        const userDocRef = doc(db, `/artifacts/${appId}/users`, user.uid);
+        await updateDoc(userDocRef, { userType: role });
+        if (role === 'athlete') {
+            setStep(2);
+        } else {
+            onOnboardingComplete();
+        }
+    };
+
+    const handleAthleteInfoSubmit = async (info) => {
+        const profileDocRef = doc(db, `/artifacts/${appId}/public/data/profiles`, user.uid);
+        await updateDoc(profileDocRef, { sport: info.sport, position: info.position });
+        onOnboardingComplete();
+    };
+
+    return (
+        <div className="max-w-xl mx-auto mt-10">
+            <AnimatePresence mode="wait">
+                <motion.div key={step} initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} transition={{ duration: 0.3 }}>
+                    {step === 1 && <RoleSelectionStep onSelectRole={handleRoleSelect} />}
+                    {step === 2 && <AthleteProfileStep onSubmit={handleAthleteInfoSubmit} />}
+                </motion.div>
+            </AnimatePresence>
+        </div>
+    );
+}
+
+function RoleSelectionStep({ onSelectRole }) {
+    const roles = [
+        { name: 'Student-Athlete', type: 'athlete', icon: <GraduationCap className="h-10 w-10 mb-2" /> },
+        { name: 'Brand / Business', type: 'brand', icon: <Briefcase className="h-10 w-10 mb-2" /> },
+        { name: 'Team / Employer', type: 'employer', icon: <Users className="h-10 w-10 mb-2" /> },
+    ];
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-2xl text-center">Welcome to SportsIN!</CardTitle>
+                <CardDescription className="text-center">To get started, tell us who you are.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {roles.map(role => (
+                    <button key={role.type} onClick={() => onSelectRole(role.type)} className="p-6 flex flex-col items-center justify-center text-center border rounded-lg hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors">
+                        {role.icon}
+                        <span className="font-semibold">{role.name}</span>
+                    </button>
+                ))}
+            </CardContent>
+        </Card>
+    );
+}
+
+function AthleteProfileStep({ onSubmit }) {
+    const [sport, setSport] = useState('');
+    const [position, setPosition] = useState('');
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSubmit({ sport, position });
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-2xl text-center">Tell us about your sport</CardTitle>
+                <CardDescription className="text-center">This will help others find you.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block font-medium mb-1">Your Sport</label>
+                        <Input value={sport} onChange={e => setSport(e.target.value)} placeholder="e.g., Basketball, Football" required />
+                    </div>
+                    <div>
+                        <label className="block font-medium mb-1">Your Position</label>
+                        <Input value={position} onChange={e => setPosition(e.target.value)} placeholder="e.g., Point Guard, Quarterback" required />
+                    </div>
+                    <div className="pt-4">
+                        <Button type="submit" variant="primary" size="lg" className="w-full">Complete Profile</Button>
+                    </div>
+                </form>
+            </CardContent>
+        </Card>
+    );
+}
+
+// --- PHONE AUTH MODAL ---
+function PhoneAuthModal({ onClose, setError }) {
+    const [step, setStep] = useState(1); // 1 for phone number, 2 for code verification
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [verificationCode, setVerificationCode] = useState('');
+    const [confirmationResult, setConfirmationResult] = useState(null);
+
+    useEffect(() => {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          'size': 'invisible',
+          'callback': (response) => {
+            // reCAPTCHA solved, allow signInWithPhoneNumber.
+          }
+        });
+        return () => {
+            if(window.recaptchaVerifier) {
+                window.recaptchaVerifier.clear();
+            }
+        }
+    }, []);
+
+    const handleSendCode = async (e) => {
+        e.preventDefault();
+        setError('');
+        try {
+            const appVerifier = window.recaptchaVerifier;
+            const result = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+            setConfirmationResult(result);
+            setStep(2);
+        } catch (error) {
+            setError(`Failed to send verification code: ${error.message}`);
+        }
+    };
+
+    const handleVerifyCode = async (e) => {
+        e.preventDefault();
+        setError('');
+        try {
+            await confirmationResult.confirm(verificationCode);
+            // onAuthStateChanged will handle the rest.
+            onClose();
+        } catch (error) {
+            setError(`Failed to verify code: ${error.message}`);
+        }
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <Card>
+                    <CardHeader className="flex justify-between items-center">
+                        <CardTitle>{step === 1 ? 'Enter Phone Number' : 'Enter Verification Code'}</CardTitle>
+                        <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X className="h-5 w-5" /></button>
+                    </CardHeader>
+                    <CardContent>
+                        {step === 1 ? (
+                            <form onSubmit={handleSendCode} className="space-y-4">
+                                <Input value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="+1 555-555-5555" required />
+                                <div id="recaptcha-container"></div>
+                                <Button type="submit" variant="primary" className="w-full">Send Code</Button>
+                            </form>
+                        ) : (
+                            <form onSubmit={handleVerifyCode} className="space-y-4">
+                                <Input value={verificationCode} onChange={e => setVerificationCode(e.target.value)} placeholder="6-digit code" required />
+                                <Button type="submit" variant="primary" className="w-full">Verify & Sign In</Button>
+                            </form>
+                        )}
+                    </CardContent>
+                </Card>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+
+// --- Other Page Components ---
+function DashboardPage({ userData, setPage }) {
+    const actions = {
+        athlete: [
+            { title: 'My Portfolio', icon: <UserIcon className="h-8 w-8 text-purple-500" />, page: 'profile' },
+            { title: 'NIL Marketplace', icon: <Trophy className="h-8 w-8 text-yellow-500" />, page: 'nil-marketplace' },
+            { title: 'NIL Deal Tracker', icon: <DollarSign className="h-8 w-8 text-red-500" />, page: 'nil-tracker' },
+        ],
+        brand: [
+            { title: 'NIL Marketplace', icon: <Trophy className="h-8 w-8 text-yellow-500" />, page: 'nil-marketplace' },
+            { title: 'Browse Athletes', icon: <Search className="h-8 w-8 text-purple-500" />, page: 'athlete-browser' },
+        ],
+        employer: [
+             { title: 'Post a Job', icon: <PlusCircle className="h-8 w-8 text-indigo-500" />, page: 'job-board' },
+             { title: 'Browse Talent', icon: <Search className="h-8 w-8 text-purple-500" />, page: 'athlete-browser' },
+        ],
+    };
+    const commonActions = [
+        { title: 'Job Board', icon: <Briefcase className="h-8 w-8 text-blue-500" />, page: 'job-board' },
+        { title: 'Education Hub', icon: <BookOpenIcon className="h-8 w-8 text-green-500" />, page: 'education-hub' },
+    ];
+    const userActions = userData ? actions[userData.userType] || [] : [];
+    return (
+        <div className="max-w-7xl mx-auto">
+            <h1 className="text-3xl font-bold mb-6">Welcome, {userData?.name}!</h1>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...userActions, ...commonActions].map(action => (
+                    <Card key={action.title} onClick={() => setPage(action.page)} className="hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer">
+                        <CardHeader className="flex flex-row items-center space-x-4"><div className="p-3 bg-slate-100 dark:bg-gray-700 rounded-lg">{action.icon}</div><CardTitle>{action.title}</CardTitle></CardHeader>
+                    </Card>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function ProfilePage({ viewingUserId, currentUser, currentUserData, setPage, setViewingProfileId }) {
+    const [profileData, setProfileData] = useState(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const isOwnProfile = useMemo(() => viewingUserId === currentUser?.uid, [viewingUserId, currentUser?.uid]);
+
+    useEffect(() => {
+        const profileRef = doc(db, `/artifacts/${appId}/public/data/profiles`, viewingUserId);
+        const unsubscribe = onSnapshot(profileRef, (doc) => {
+            if (doc.exists()) {
+                setProfileData({ id: doc.id, ...doc.data() });
+            } else {
+                console.log("No profile document found for user.");
+            }
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, [viewingUserId]);
+
+    const handleSave = useCallback(async (updatedData) => {
+        if (!isOwnProfile) return;
+        const profileRef = doc(db, `/artifacts/${appId}/public/data/profiles`, currentUser.uid);
+        await updateDoc(profileRef, updatedData);
+        setIsEditing(false);
+    }, [currentUser?.uid, isOwnProfile]);
+
+    const handleFollow = useCallback(async () => {
+        if (isOwnProfile) return;
+        const currentUserRef = doc(db, `/artifacts/${appId}/users`, currentUser.uid);
+        const targetUserRef = doc(db, `/artifacts/${appId}/users`, viewingUserId);
+
+        if (currentUserData?.following?.includes(viewingUserId)) {
+            await updateDoc(currentUserRef, { following: arrayRemove(viewingUserId) });
+            await updateDoc(targetUserRef, { followers: arrayRemove(currentUser.uid) });
+        } else {
+            await updateDoc(currentUserRef, { following: arrayUnion(viewingUserId) });
+            await updateDoc(targetUserRef, { followers: arrayUnion(currentUser.uid) });
+        }
+    }, [currentUser?.uid, currentUserData?.following, viewingUserId, isOwnProfile]);
+
+    if (loading) return <p>Loading profile...</p>;
+    if (!profileData) return <p>No profile found.</p>;
+
+    return (
+        <Card className="max-w-4xl mx-auto">
+            <CardHeader className="flex justify-between items-center">
+                <CardTitle className="text-3xl">{isOwnProfile ? "My Athlete Portfolio" : profileData.name}</CardTitle>
+                {isOwnProfile ? (
+                    <Button onClick={() => setIsEditing(!isEditing)} variant="outline">{isEditing ? <Eye className="mr-2 h-4 w-4" /> : <Edit className="mr-2 h-4 w-4" />}{isEditing ? 'View Mode' : 'Edit Mode'}</Button>
+                ) : (
+                    <Button onClick={handleFollow} variant={currentUserData?.following?.includes(viewingUserId) ? 'secondary' : 'primary'}>
+                        {currentUserData?.following?.includes(viewingUserId) ? 'Following' : 'Follow'}
+                    </Button>
+                )}
+            </CardHeader>
+            <CardContent>{isEditing ? <ProfileEditor currentData={profileData} onSave={handleSave} onCancel={() => setIsEditing(false)} /> : <ProfileViewer data={profileData} />}</CardContent>
+        </Card>
+    );
+}
+
+function ProfileViewer({ data }) {
+    return (
+        <div>
+            <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-8">
+                <Avatar src={data.profilePicUrl} fallback={data.name.split(' ').map(n => n[0]).join('')} className="w-32 h-32 text-4xl border-4 border-white dark:border-gray-700 shadow-lg" />
+                <div className="flex-grow text-center md:text-left">
+                    <h3 className="text-3xl font-bold">{data.name}</h3>
+                    <p className="text-lg text-gray-600 dark:text-gray-400">{data.sport} - {data.position}</p>
+                    <p className="mt-2 text-gray-700 dark:text-gray-300">{data.bio}</p>
+                </div>
+            </div>
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h4 className="text-xl font-semibold mb-2 border-b pb-2">Key Stats</h4>
+                    <ul className="space-y-2">{data.stats?.map((stat, index) => <li key={index} className="flex justify-between bg-gray-50 dark:bg-gray-700/50 p-3 rounded-md"><strong>{stat.name}:</strong> <span>{stat.value}</span></li>)}</ul>
+                </div>
+                <div>
+                    <h4 className="text-xl font-semibold mb-2 border-b pb-2">Academics</h4>
+                    <ul className="space-y-2">{data.academics?.map((item, index) => <li key={index} className="flex justify-between bg-gray-50 dark:bg-gray-700/50 p-3 rounded-md"><strong>{item.name}:</strong> <span>{item.value}</span></li>)}</ul>
+                </div>
+            </div>
+             <div className="mt-8">
+                <h4 className="text-xl font-semibold mb-2 border-b pb-2">Video Highlights</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{data.videoHighlights?.map((video, index) => (<div key={index} className="aspect-w-16 aspect-h-9"><iframe src={video.url.replace("watch?v=", "embed/")} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="w-full h-full rounded-lg shadow-md"></iframe></div>))}</div>
+            </div>
+        </div>
+    );
+}
+
+function ProfileEditor({ currentData, onSave, onCancel }) {
+    const [formData, setFormData] = useState(currentData);
+    const [bioKeywords, setBioKeywords] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+    const handleGenerateBio = async () => {
+        if (!bioKeywords) return;
+        setIsGenerating(true);
+        const prompt = `You are an expert career coach for athletes. Take the following keywords and athletic traits and write a compelling, professional bio (2-3 sentences) for a career platform profile. Translate the athletic skills into business-friendly language. Keywords: "${bioKeywords}"`;
+        try {
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!response.ok) throw new Error(`API call failed with status: ${response.status}`);
+            const result = await response.json();
+            if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                setFormData({ ...formData, bio: result.candidates[0].content.parts[0].text });
+            } else { throw new Error("Unexpected API response format."); }
+        } catch (error) { console.error("Error generating bio:", error); } 
+        finally { setIsGenerating(false); }
+    };
+    
+    return (
+        <form onSubmit={(e) => { e.preventDefault(); onSave(formData); }}>
+            <div className="mb-4 p-4 bg-blue-50 dark:bg-gray-700/50 rounded-lg border border-blue-200 dark:border-blue-800">
+                <label className="block font-bold mb-2">Profile Bio</label>
+                <textarea name="bio" value={formData.bio} onChange={handleChange} className="w-full p-2 border rounded mb-2 bg-white dark:bg-gray-800" rows="4" />
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <Input value={bioKeywords} onChange={(e) => setBioKeywords(e.target.value)} placeholder="Keywords: e.g., team captain, resilient" className="pl-4"/>
+                    <Button type="button" onClick={handleGenerateBio} disabled={isGenerating}><Sparkles className="mr-2 h-4 w-4" /> {isGenerating ? 'Generating...' : 'Generate with AI'}</Button>
+                </div>
+            </div>
+            <div className="flex justify-end gap-4 mt-8"><Button type="button" variant="outline" onClick={onCancel}>Cancel</Button><Button type="submit" variant="primary">Save Profile</Button></div>
+        </form>
+    );
+}
+
+function NILMarketplace({ user, userData }) {
+    const [opportunities, setOpportunities] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showForm, setShowForm] = useState(false);
+
+    useEffect(() => {
+        const q = query(collection(db, `/artifacts/${appId}/public/data/nil_opportunities`), firestoreOrderBy('createdAt', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => { setOpportunities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); setLoading(false); }, (error) => { console.error("Error fetching NILs:", error); setLoading(false); });
+        return () => unsubscribe();
+    }, []);
+    
+    return (
+         <div className="max-w-6xl mx-auto">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-bold">NIL Marketplace</h2>
+                {userData?.userType === 'brand' && (<Button onClick={() => setShowForm(!showForm)} variant="primary"><PlusCircle className="mr-2 h-4 w-4" /> {showForm ? 'Close Form' : 'Post Opportunity'}</Button>)}
+            </div>
+            <AnimatePresence>{showForm && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3 }}><NILForm user={user} userData={userData} onPost={() => setShowForm(false)} /></motion.div>)}</AnimatePresence>
+            {loading ? <p>Loading opportunities...</p> : (<div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">{opportunities.map(opp => <NILCard key={opp.id} opp={opp} user={user} userData={userData} />)}</div>)}
+        </div>
+    );
+}
+
+function NILCard({ opp, user, userData }) {
+    const handleApply = async (oppId) => {
+        if (!user || userData.userType !== 'athlete') return;
+        const oppRef = doc(db, `/artifacts/${appId}/public/data/nil_opportunities`, oppId);
+        if (opp.applicants?.some(applicant => applicant.uid === user.uid)) { alert("You have already applied for this opportunity."); return; }
+        await updateDoc(oppRef, { applicants: arrayUnion({uid: user.uid, name: userData.name}) });
+        alert("Application submitted successfully!");
+    };
+    return (
+        <Card className="flex flex-col">
+            <CardHeader><div className="flex justify-between items-start"><div><CardTitle>{opp.title}</CardTitle><CardDescription className="flex items-center pt-1"><Building className="mr-1 h-4 w-4"/>{opp.brandName}</CardDescription></div><Badge variant="secondary">{opp.compensation}</Badge></div></CardHeader>
+            <CardContent className="flex-grow"><p className="whitespace-pre-wrap">{opp.description}</p></CardContent>
+            <div className="p-6 pt-0">
+                {user && userData?.userType === 'athlete' && <Button onClick={() => handleApply(opp.id)} className="w-full">Apply Now</Button>}
+                {user && userData?.userType === 'brand' && opp.brandId === user.uid && (<div className="text-sm text-gray-500">Applicants: {opp.applicants?.length || 0}</div>)}
+            </div>
+        </Card>
+    );
+}
+
+function NILForm({ user, userData, onPost }) {
+    const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+    const [compensation, setCompensation] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        await addDoc(collection(db, `/artifacts/${appId}/public/data/nil_opportunities`), { brandId: user.uid, brandName: userData.name, title, description, compensation, createdAt: new Date(), status: 'open', applicants: [] });
+        onPost();
+    };
+
+    const handleEnhanceDescription = async () => {
+        if (!description) return;
+        setIsGenerating(true);
+        const prompt = `You are an expert marketing copywriter specializing in sports. Enhance the following NIL opportunity description to be more professional and appealing to student-athletes. Description: "${description}"`;
+        try {
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!response.ok) throw new Error(`API call failed`);
+            const result = await response.json();
+            if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                setDescription(result.candidates[0].content.parts[0].text);
+            }
+        } catch (error) { console.error("Error enhancing description:", error); } 
+        finally { setIsGenerating(false); }
+    };
+
+    return (
+        <Card className="mb-6">
+            <CardHeader><CardTitle>Post a New NIL Opportunity</CardTitle></CardHeader>
+            <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Opportunity Title" required className="pl-4" />
+                    <div>
+                        <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Description" className="w-full p-2 border rounded bg-white dark:bg-gray-700" rows="4" required />
+                        <Button type="button" onClick={handleEnhanceDescription} disabled={isGenerating} variant="outline" size="sm"><Sparkles className="mr-2 h-4 w-4" /> {isGenerating ? 'Enhancing...' : 'Enhance with AI'}</Button>
+                    </div>
+                    <Input value={compensation} onChange={e => setCompensation(e.target.value)} placeholder="Compensation (e.g., $500)" required className="pl-4" />
+                    <div className="flex justify-end"><Button type="submit" variant="primary">Post Opportunity</Button></div>
+                </form>
+            </CardContent>
+        </Card>
+    );
+}
+
+function JobBoard({ user, userData, setApplyingToJob }) {
+    const [jobs, setJobs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showForm, setShowForm] = useState(false);
+
+    useEffect(() => {
+        const q = query(collection(db, `/artifacts/${appId}/public/data/jobs`), firestoreOrderBy('createdAt', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => { setJobs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); setLoading(false); }, (error) => { console.error("Error fetching jobs:", error); setLoading(false); });
+        return () => unsubscribe();
+    }, []);
+
+    return (
+        <div className="max-w-6xl mx-auto">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-bold">Job Board</h2>
+                {user && userData?.userType === 'employer' && (<Button onClick={() => setShowForm(!showForm)} variant="primary"><PlusCircle className="mr-2 h-4 w-4" /> {showForm ? 'Close Form' : 'Post a Job'}</Button>)}
+            </div>
+            <AnimatePresence>{showForm && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3 }}><JobForm user={user} userData={userData} onPost={() => setShowForm(false)} /></motion.div>)}</AnimatePresence>
+            {loading ? <p>Loading jobs...</p> : (<div className="grid md:grid-cols-2 gap-6">{jobs.map(job => (<Card key={job.id}><CardHeader><CardTitle>{job.title}</CardTitle><CardDescription>{job.company}</CardDescription></CardHeader><CardContent className="space-y-2"><p className="flex items-center"><MapPin className="mr-2 h-4 w-4" />{job.location}</p><p className="flex items-center text-green-600"><DollarSign className="mr-2 h-4 w-4" />{job.salary}</p><Badge variant="outline">{job.type}</Badge><Button onClick={() => setApplyingToJob(job)} className="w-full mt-4">Apply Now</Button></CardContent></Card>))}</div>)}
+        </div>
+    );
+}
+
+function JobForm({ user, userData, onPost }) {
+    const [title, setTitle] = useState('');
+    const [company, setCompany] = useState(userData.name || '');
+    const [location, setLocation] = useState('');
+    const [salary, setSalary] = useState('');
+    const [type, setType] = useState('Full-time');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        await addDoc(collection(db, `/artifacts/${appId}/public/data/jobs`), { employerId: user.uid, title, company, location, salary, type, createdAt: new Date() });
+        onPost();
+    };
+
+    return (
+        <Card className="mb-6">
+            <CardHeader><CardTitle>Post a New Job</CardTitle></CardHeader>
+            <CardContent>
+                <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Job Title" required className="pl-4" />
+                    <Input value={company} onChange={e => setCompany(e.target.value)} placeholder="Company Name" required className="pl-4" />
+                    <Input value={location} onChange={e => setLocation(e.target.value)} placeholder="Location (e.g., New York, NY)" required className="pl-4" />
+                    <Input value={salary} onChange={e => setSalary(e.target.value)} placeholder="Salary Range" required className="pl-4" />
+                    <select value={type} onChange={e => setType(e.target.value)} className="w-full p-3 border rounded-lg bg-white dark:bg-gray-700 dark:border-gray-600"><option>Full-time</option><option>Part-time</option><option>Internship</option><option>Contract</option></select>
+                    <div className="md:col-span-2 flex justify-end"><Button type="submit" variant="primary">Post Job</Button></div>
+                </form>
+            </CardContent>
+        </Card>
+    );
+}
+
+function NILTracker({ user }) {
+    const [deals, setDeals] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+
+    useEffect(() => {
+        if (!user) return;
+        const dealsCollectionRef = collection(db, `/artifacts/${appId}/users/${user.uid}/nil_deals`);
+        const q = query(dealsCollectionRef, firestoreOrderBy('createdAt', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setDeals(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setLoading(false);
+        }, (error) => { console.error("Error fetching NIL deals:", error); setLoading(false); });
+        return () => unsubscribe();
+    }, [user]);
+
+    const handleAddDeal = async (dealData) => {
+        if (!user) return;
+        const dealsCollectionRef = collection(db, `/artifacts/${appId}/users/${user.uid}/nil_deals`);
+        await addDoc(dealsCollectionRef, { ...dealData, createdAt: new Date() });
+        setShowModal(false);
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-bold">NIL Deal Tracker</h2>
+                <Button onClick={() => setShowModal(true)} variant="primary"><PlusCircle className="mr-2 h-4 w-4" /> Log New Deal</Button>
+            </div>
+            <AnimatePresence>{showModal && (<NILDealModal onAddDeal={handleAddDeal} onClose={() => setShowModal(false)} />)}</AnimatePresence>
+            <Card>
+                <CardHeader><CardTitle>Your Logged Deals</CardTitle><CardDescription>A private record of your NIL partnerships for compliance and tracking.</CardDescription></CardHeader>
+                <CardContent>
+                    {loading ? (<p>Loading your deals...</p>) : deals.length > 0 ? (
+                        <div className="space-y-4">
+                            {deals.map(deal => (
+                                <div key={deal.id} className="p-4 rounded-lg border bg-slate-50 dark:bg-gray-700/50 flex justify-between items-center">
+                                    <div>
+                                        <p className="font-bold text-lg">{deal.brandName}</p>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">{deal.description}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-bold text-lg text-green-600 dark:text-green-400">{deal.compensation}</p>
+                                        <Badge variant={deal.status === 'Active' ? 'secondary' : 'primary'}>{deal.status}</Badge>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (<p className="text-center text-gray-500 py-8">You haven't logged any deals yet. Click "Log New Deal" to get started.</p>)}
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+function NILDealModal({ onAddDeal, onClose }) {
+    const [brandName, setBrandName] = useState('');
+    const [description, setDescription] = useState('');
+    const [compensation, setCompensation] = useState('');
+    const [status, setStatus] = useState('Active');
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onAddDeal({ brandName, description, compensation, status });
+    };
+
+    return (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                <Card>
+                    <CardHeader className="flex justify-between items-center">
+                        <CardTitle>Log a New NIL Deal</CardTitle>
+                        <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X className="h-5 w-5" /></button>
+                    </CardHeader>
+                    <CardContent>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <Input value={brandName} onChange={e => setBrandName(e.target.value)} placeholder="Brand Name" required />
+                            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief Description (e.g., Social media posts)" className="w-full p-3 pl-4 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600" rows="3" required />
+                            <Input value={compensation} onChange={e => setCompensation(e.target.value)} placeholder="Compensation (e.g., $1,000, Free Gear)" required />
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                                <select value={status} onChange={e => setStatus(e.target.value)} className="w-full p-3 border rounded-lg bg-white dark:bg-gray-700 dark:border-gray-600">
+                                    <option>Active</option>
+                                    <option>Completed</option>
+                                    <option>Pending</option>
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-4 pt-4">
+                                <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+                                <Button type="submit" variant="primary">Save Deal</Button>
+                            </div>
+                        </form>
+                    </CardContent>
+                </Card>
+            </motion.div>
+        </motion.div>
+    );
+}
+
+function AthleteBrowserPage({ setPage, setViewingProfileId }) { 
+    const [athletes, setAthletes] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const profilesRef = collection(db, `/artifacts/${appId}/public/data/profiles`);
+        const q = query(profilesRef);
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setAthletes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const viewProfile = (id) => {
+        setViewingProfileId(id);
+        setPage('profile');
+    }
+
+    return (
+        <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl font-bold mb-6">Browse Athletes</h2>
+            {loading ? <p>Loading athletes...</p> : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {athletes.map(athlete => (
+                        <Card key={athlete.id} className="cursor-pointer hover:shadow-xl transition-shadow" onClick={() => viewProfile(athlete.id)}>
+                            <CardHeader>
+                                <div className="flex items-center gap-4">
+                                    <Avatar src={athlete.profilePicUrl} fallback={athlete.name.split(' ').map(n => n[0]).join('')} />
+                                    <div>
+                                        <CardTitle>{athlete.name}</CardTitle>
+                                        <CardDescription>{athlete.sport} - {athlete.position}</CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                        </Card>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+function EducationHub() { return <Card className="text-center p-10 max-w-2xl mx-auto"><CardTitle className="text-3xl">Education Hub</CardTitle><CardDescription className="mt-2">Coming soon: Resources to help you navigate your sports career.</CardDescription></Card>; }
+
+// **NEW**: Job Application Page
+function JobApplicationPage({ job, user, onBack }) {
+    const [formData, setFormData] = useState({
+        fullName: user?.displayName || '',
+        emailAddress: user?.email || '',
+        contactNumber: '',
+        currentLocation: '',
+        linkedIn: '',
+        experience: '',
+        qualification: '',
+        expertise: [],
+        resume: null,
+        coverLetter: null,
+    });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleCheckboxChange = (e) => {
+        const { name, checked } = e.target;
+        setFormData(prev => {
+            const newExpertise = checked
+                ? [...prev.expertise, name]
+                : prev.expertise.filter(item => item !== name);
+            return { ...prev, expertise: newExpertise };
+        });
+    };
+
+    const handleFileChange = (e) => {
+        const { name, files } = e.target;
+        if (files.length > 0) {
+            setFormData(prev => ({ ...prev, [name]: files[0] }));
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        try {
+            // **NOTE**: File uploads are disabled to avoid needing a billing account.
+            // In a real app, you would enable Storage and uncomment the following lines.
+            // let resumeURL = '';
+            // let coverLetterURL = '';
+
+            // if (formData.resume) {
+            //     const resumeRef = ref(storage, `resumes/${job.id}/${user.uid}/${formData.resume.name}`);
+            //     await uploadBytes(resumeRef, formData.resume);
+            //     resumeURL = await getDownloadURL(resumeRef);
+            // }
+            // if (formData.coverLetter) {
+            //     const coverLetterRef = ref(storage, `cover_letters/${job.id}/${user.uid}/${formData.coverLetter.name}`);
+            //     await uploadBytes(coverLetterRef, formData.coverLetter);
+            //     coverLetterURL = await getDownloadURL(coverLetterRef);
+            // }
+
+            const applicationsRef = collection(db, `/artifacts/${appId}/public/data/jobs/${job.id}/applications`);
+            await addDoc(applicationsRef, {
+                ...formData,
+                // resume: resumeURL,
+                // coverLetter: coverLetterURL,
+                applicantId: user.uid,
+                submittedAt: new Date(),
+            });
+
+            alert('Application submitted successfully!');
+            onBack();
+
+        } catch (error) {
+            console.error("Error submitting application:", error);
+            alert("Failed to submit application. Please try again.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto">
+            <Button variant="outline" onClick={onBack} className="mb-4">← Back to Jobs</Button>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-3xl">Job Application Form</CardTitle>
+                    <CardDescription>Applying for {job.title} at {job.company}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSubmit} className="space-y-8">
+                        {/* Personal Information */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                           <div className="space-y-4">
+                               <h3 className="text-lg font-semibold">Personal Information</h3>
+                               <div><label>Full Name</label><Input name="fullName" value={formData.fullName} onChange={handleInputChange} required /></div>
+                               <div><label>Email Address</label><Input name="emailAddress" type="email" value={formData.emailAddress} onChange={handleInputChange} required /></div>
+                               <div><label>Contact Number</label><Input name="contactNumber" value={formData.contactNumber} onChange={handleInputChange} required /></div>
+                               <div><label>Current Location</label><Input name="currentLocation" value={formData.currentLocation} onChange={handleInputChange} /></div>
+                               <div><label>LinkedIn Profile/Portfolio (Optional)</label><Input name="linkedIn" value={formData.linkedIn} onChange={handleInputChange} /></div>
+                           </div>
+                           <div className="space-y-4">
+                               <h3 className="text-lg font-semibold">Experience and Qualification</h3>
+                               <div>
+                                   <label>Total Years of Experience</label>
+                                   <select name="experience" value={formData.experience} onChange={handleInputChange} className="w-full p-3 border rounded-lg bg-white dark:bg-gray-700 dark:border-gray-600" required>
+                                       <option value="">Select experience</option>
+                                       <option>0-2 years</option><option>3-5 years</option><option>6-10 years</option><option>10+ years</option>
+                                   </select>
+                               </div>
+                               <div>
+                                   <label>Highest Qualification</label>
+                                   <select name="qualification" value={formData.qualification} onChange={handleInputChange} className="w-full p-3 border rounded-lg bg-white dark:bg-gray-700 dark:border-gray-600" required>
+                                       <option value="">Select qualification</option>
+                                       <option>High School</option><option>Bachelor's</option><option>Master's</option><option>Doctorate</option>
+                                   </select>
+                               </div>
+                               <div>
+                                   <label>Field of Expertise</label>
+                                   <div className="space-y-2 mt-2">
+                                       {['IT', 'Marketing', 'Finance', 'HR', 'Operations'].map(field => (
+                                           <label key={field} className="flex items-center"><input type="checkbox" name={field} onChange={handleCheckboxChange} className="mr-2" /> {field}</label>
+                                       ))}
+                                   </div>
+                               </div>
+                           </div>
+                        </div>
+                        
+                        {/* File Uploads */}
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold">Documents</h3>
+                            <p className="text-sm text-gray-500">File uploads are disabled in this version. Please use the LinkedIn/Portfolio link to share your resume.</p>
+                        </div>
+
+                        <div className="flex justify-end pt-6">
+                            <Button type="submit" variant="primary" size="lg" disabled={isSubmitting}>
+                                {isSubmitting ? 'Submitting...' : 'Submit Application'}
+                            </Button>
+                        </div>
+                    </form>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
+export default App;

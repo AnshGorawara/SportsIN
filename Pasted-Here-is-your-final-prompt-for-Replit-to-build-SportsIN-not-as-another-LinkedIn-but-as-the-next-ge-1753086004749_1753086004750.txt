@@ -1,0 +1,93 @@
+Here is your final prompt for Replit to build SportsIN — not as another LinkedIn, but as the next-generation ecosystem for athletes in India and beyond.
+
+⸻
+
+✅ COPY + PASTE THIS INTO REPLIT AI:
+
+⸻
+
+🚨 MISSION BRIEF
+We are building SportsIN, a platform 10000x beyond LinkedIn — a next-gen career + opportunity engine for Indian athletes, brands, and organizations. Our product must integrate the energy and vision of the two attached images (IMG_0278.jpeg & IMG_0279.jpeg) — ambition, empowerment, grit — and reflect that in every component of the experience.
+
+⸻
+
+🚧 Immediate Replit Build Goals (Initial Version ++)
+
+1. Authentication & Access
+	•	Fix ALL sign-in flows (Google, phone, demo, email — no breakage).
+	•	Add onboarding wizard that tailors experience by role (athlete, brand, coach, scout, admin).
+	•	Role-based dashboard routing.
+
+2. Fully Integrated Dynamic Job Application System
+	•	Make the full-length job form functional (see previous screenshots and JPEGs).
+	•	Auto-save form progress to Firestore.
+	•	Upload resume/cover letter to Firebase Storage.
+	•	Auto-link applications to job + user ID.
+
+3. Seed Data and Real-Time Use
+	•	Insert 20+ dummy job listings, 50+ mock athlete profiles, 10 NIL listings.
+	•	Show live data upon login for quick UI feedback.
+
+4. Visual Polish + UI Quality
+	•	Apply a sports-first design system (bold fonts, motivational tone, vibrant gradients).
+	•	Responsive layout — working flawlessly on mobile.
+	•	Add dark mode toggle and ensure persistence via Firebase user settings.
+
+⸻
+
+🎯 Product Features That Must Feel Bleeding-Edge (Make this 1 Zillion Fold Better)
+
+1. India-First, Global-Ready
+	•	Localized content and city tagging (Mumbai, Delhi, Bengaluru).
+	•	Allow filtering jobs or athletes by Indian state, city, language.
+	•	Build partnerships section: “Scouted By” or “Partner Brands” (TATA, JSW, etc.)
+
+2. Matchmaking Engine
+	•	Auto-rank jobs per athlete based on skill, city, education, sport.
+	•	Give score-based recommendations like:
+“🏆 85% Match for this Football Analyst Role in Bengaluru”
+
+3. Verified Athlete + NIL Boosting
+	•	Verified badge based on KYC or organization backing.
+	•	NIL monetization dashboard — show potential earnings, track offers.
+	•	Allow athletes to “Boost” NIL profiles to brands (limited free boosts per week).
+
+4. Social, Portfolio & Community Layer
+	•	Let athletes post wins, highlights, event photos (image/video support).
+	•	Build a showcase portfolio builder from achievements + photos.
+	•	Leaderboards by sport, city, or engagement.
+
+⸻
+
+📊 Admin + Ops
+	•	Admin panel to manage:
+– User reports
+– NIL moderation
+– Applications
+– Bulk user verification (Khelo India, private orgs)
+	•	Real-time analytics: new signups, active users, job views.
+
+⸻
+
+🛠️ Dev + Ops
+	•	GitHub + CI/CD auto deploys (Vercel preferred).
+	•	Firebase security rules (role-based access control).
+	•	Basic unit + integration tests (auth, form submission, data sync).
+
+⸻
+
+🌟 Vibe of the Product
+
+Every interaction should feel like a win: animated confetti after job applications, athlete stats shown like player cards, motivational copy (“You’re one step closer to your dream!”). The UI/UX must bleed confidence and clarity — just like IMG_0278 and IMG_0279.
+
+⸻
+
+✅ Final Instruction
+
+→ Design and build this to not just replace LinkedIn for sports
+→ Build a movement.
+→ Build SportsIN.
+
+⸻
+
+Let me know if you’d like me to generate this in .md, Notion doc, or GitHub README format too.

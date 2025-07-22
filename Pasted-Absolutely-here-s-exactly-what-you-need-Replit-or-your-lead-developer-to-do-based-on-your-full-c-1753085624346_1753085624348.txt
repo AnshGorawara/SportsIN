@@ -1,0 +1,101 @@
+Absolutely — here’s exactly what you need Replit (or your lead developer) to do based on your full chat history, screenshots, and objectives. This is a comprehensive technical + strategic task list, broken into critical phases to deliver a clean, production-grade “LinkedIn for Sports” platform.
+
+⸻
+
+✅ GOAL:
+
+You want a fully working platform that allows:
+	•	Seamless sign-up/sign-in (Google, email, phone, demo)
+	•	Athlete, brand, and employer onboarding
+	•	A polished and fully functioning job application form (as detailed in your screenshots)
+	•	Secure Firestore rules and data persistence
+	•	High-quality, scalable frontend with no blockers or bugs
+
+⸻
+
+🔧 REPLIT TASK LIST — DO THIS NOW:
+
+1. 🔥 CRITICAL FIXES (must be working first)
+
+🔐 AUTH FLOW FIXES
+	•	Remove anonymous auto sign-in (breaks account upgrades & demo flow)
+	•	Fix Google/Apple sign-in race condition: wait for Firestore doc creation instead of assuming “unauthenticated”
+	•	Handle auth/account-exists-with-different-credential error → offer to merge accounts
+	•	Ensure all social providers (Google, Apple, Facebook) are fully configured in Firebase
+	•	Enable signInWithRedirect() on iOS Safari fallback
+
+👤 ACCOUNT CREATION ISSUES
+	•	Ensure user profile & onboarding doc is always created after auth
+	•	Patch Demo login logic: if demo already exists, reuse it; don’t create duplicates
+
+⸻
+
+2. 💾 FIRESTORE & BACKEND SETUP
+
+🔐 FIRESTORE RULES
+	•	Implement strict role-based Firestore rules:
+	•	Only allow athletes to update /profiles
+	•	Brands/employers can write /jobs and view /applications
+	•	Public read access to /jobs, /profiles (with App Check required)
+
+📄 DATABASE STRUCTURE (CONFIRM OR SETUP)
+	•	/artifacts/{appId}/users/{uid}
+	•	/artifacts/{appId}/public/data/profiles/{uid}
+	•	/artifacts/{appId}/public/data/jobs/{jobId}
+	•	/artifacts/{appId}/applications/{jobId}/{uid} (new submissions)
+
+⸻
+
+3. 🧠 JOB APPLICATION FORM: FULL FEATURE INTEGRATION
+
+Your multi-step form is beautiful and highly detailed (from screenshots). Make sure this is fully implemented and connected.
+
+	•	All fields from screenshots must be functional (personal info, experience, gov-sector knowledge, creative Qs)
+	•	File upload: resumes & cover letters → store in Firebase Storage
+	•	Add validation (zod or yup) and UX feedback
+	•	On submit: write full payload to /applications/{jobId}/{uid}
+	•	Add error boundaries + confirmation screen
+
+⸻
+
+4. 🛠 UI/UX POLISH & FUNCTIONALITY
+	•	Turn loading flashes into skeleton screens
+	•	Convert critical pages to TypeScript
+	•	Break giant components into modular hooks (useAuth, useJobs, useProfile)
+	•	Make “My Profile” and “Dashboard” context-aware (don’t show brand dashboard to athlete)
+	•	Seed dummy data if collections are empty (jobs, NILs, athlete profiles)
+
+⸻
+
+5. 🚀 PRODUCTION READINESS (optional, for launch)
+	•	Firebase Hosting → Cloudflare or Vercel (for custom domain + SEO)
+	•	App Check → Enforce mode
+	•	GitHub Actions → Lint + Test + Deploy preview channels
+	•	Turn off setLogLevel('debug')
+	•	Bundle Firebase keys with .env (not hardcoded)
+
+⸻
+
+6. 🔜 NEXT PHASE: PREMIUM FEATURES (plan only)
+
+Once the MVP is solid, move to:
+
+	•	Messaging (Firestore subcollections)
+	•	Endorsements / references
+	•	Stripe integration for NIL monetization
+	•	Verified badge workflow
+	•	Algolia or Firestore-powered search
+
+⸻
+
+🧩 FINAL INSTRUCTIONS FOR YOUR DEVELOPER / REPLIT TEAM
+
+🗣️ Tell them this directly:
+
+✅ Your job is to deliver a clean, live product with no auth errors and a fully working job application pipeline.
+Everything must be connected to Firebase (auth, Firestore, storage) and meet the design shown in screenshots.
+No broken links, no temp placeholders, no dummy-only flow — this is an MVP users should be able to use end-to-end.
+
+⸻
+
+Would you like me to draft the Firebase rules or a checklist template for Replit to track this?

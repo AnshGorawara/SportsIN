@@ -1,0 +1,33 @@
+
+Replit AI Prompt (copy → paste)
+Why It’s Next-Level
+1
+“Add Wearable-Data Dashboards:• Build OAuth connectors for Apple Health, Garmin Connect, and Google Fit.• On athlete profile, show live widgets (heart-rate, VO₂ max, sleep score).• Store raw records in /metrics/{uid}/{date}.• Trigger Cloud Function every night to compute 7-day performance trend and save back to Firestore.”
+Makes SportsIN the first career network that proves form with biometric data, not just words.
+2
+“AI Highlight Reel Generator:• Allow athletes to drop any YouTube URL or upload MP4.• Use FFmpeg + OpenAI Whisper to detect exciting moments (crowd cheer ≥ –12 dB or commentator keywords ‘goal’, ‘six’, ‘ace’).• Auto-splice a 30-sec hype reel, store in Firebase Storage, and embed on profile.”**
+Removes the hassle of editing; every athlete gets a cinematic clip in minutes.
+3
+“Pose-Estimation Skill Scans:• Integrate TensorFlow MoveNet in browser.• Let users record a 5-sec sprint or jump.• Calculate knee-angle, airtime, G-force.• Publish ‘Explosiveness Score’ on profile.”**
+Turns raw movement into quantified bragging rights that recruiters can trust.
+4
+“Voice-Only Onboarding:• Add option ‘Create my profile by talking’.• Record 60-sec voice, run through Whisper → text → GPT prompt that extracts: name, sport, position, achievements.• Pre-fill onboarding form and let user confirm.”**
+Captures users who hate typing (esp. on mobile in regional languages).
+5
+“AR Recruitment Rooms:• Use WebXR + Three.js.• When brand schedules interview, generate a unique WebXR link.• Inside room, display floating resume cards, highlight reel on a virtual screen, and live avatar video feed.”**
+Gives SportsIN a “metaverse edge” that’s still browser-based — no headset required.
+6
+“Fan Micro-Sponsorship Widget:• Add ‘Support ₹99’ button on athlete profiles.• Integrate Razorpay ‘Donate’ flow.• Show real-time supporter ticker + monthly leaderboard.• Send automated thank-you video using D-ID API.”**
+Opens a new revenue channel beyond NIL deals, tailored for India’s cricket-style fan culture.
+7
+“Compliance Guardrails for NCAA & AIU:• When brand drafts NIL contract, run text through GPT with rule-set prompt (NCAA, AIU, BCCI).• Flag risky clauses; suggest compliant wording.• Block submission until green.”**
+Saves both parties from accidental rule violations — unique selling point.
+8
+“Crowd-Scouted Potential Badge:• Let verified coaches ‘tag’ an emerging athlete once per week.• When an athlete gets ≥ 5 tags, auto-award ‘Rising Star’ badge.• Display badge weight in job search ranking.”**
+Gamifies early-talent discovery and creates viral loops among coaches.
+9
+“AI Scholarship Matchmaker:• Run nightly Cloud Function that compares athlete metrics (grades, income bracket, sport) against public & private scholarship JSON feeds.• Email + in-app notify athletes with ≥ 80 % fit.”**
+Converts SportsIN into a life-changing resource for under-resourced talent.
+10
+“Synergy Score for Team Recruitment:• When employer forms a candidate shortlist, compute Jaccard overlap of play-style metrics, personality survey, and complementary positions.• Display ‘Team Synergy 0-100’ next to each candidate.”**
+Goes beyond individual fit → optimises whole-team chemistry, a feature even LinkedIn lacks.
